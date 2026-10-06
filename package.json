@@ -1,12 +1,16 @@
 {
-  "name": "webp-converter",
-  "version": "1.0.0",
+  "name": "rust-webp-converter",
+  "version": "0.1.0",
   "description": "Fast image to WebP conversion for Node.js, with animated GIF support, powered by libwebp and napi-rs",
   "main": "index.js",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/pedromneto97/webp-converter.git"
   },
+  "bugs": {
+    "url": "https://github.com/pedromneto97/webp-converter/issues"
+  },
+  "homepage": "https://github.com/pedromneto97/webp-converter#readme",
   "license": "MIT",
   "keywords": [
     "webp",
@@ -51,8 +55,6 @@
     "lint": "oxlint .",
     "prepublishOnly": "napi prepublish -t npm",
     "test": "ava",
-    "preversion": "napi build --platform && git add .",
-    "version": "napi version",
     "prepare": "husky"
   },
   "devDependencies": {

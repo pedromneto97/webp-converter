@@ -3028,6 +3028,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"rust-webp-converter@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "rust-webp-converter@workspace:."
+  dependencies:
+    "@napi-rs/cli": "npm:^3.9.1"
+    "@oxc-node/core": "npm:^0.1.2"
+    "@types/node": "npm:^26.6.4"
+    ava: "npm:^8.0.1"
+    husky: "npm:^9.1.7"
+    lint-staged: "npm:^17.5.1"
+    npm-run-all2: "npm:^9.0.3"
+    oxfmt: "npm:^0.72.0"
+    oxlint: "npm:^1.83.0"
+    tinybench: "npm:^6.2.0"
+    typescript: "npm:^7.0.2"
+  languageName: unknown
+  linkType: soft
+
 "safer-buffer@npm:>= 2.1.2 < 3.0.0":
   version: 2.1.2
   resolution: "safer-buffer@npm:2.1.2"
@@ -3439,24 +3457,6 @@ __metadata:
   checksum: 10c0/5612d5f3e54760a797052eb4927f0ddc01383550f542ccd33d5238cfd65aeed392a45ad38364970d0a0f4fea32e1f4d231b3d8dac4a3bdd385e5cf802ae097db
   languageName: node
   linkType: hard
-
-"webp-converter@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "webp-converter@workspace:."
-  dependencies:
-    "@napi-rs/cli": "npm:^3.9.1"
-    "@oxc-node/core": "npm:^0.1.2"
-    "@types/node": "npm:^26.6.4"
-    ava: "npm:^8.0.1"
-    husky: "npm:^9.1.7"
-    lint-staged: "npm:^17.5.1"
-    npm-run-all2: "npm:^9.0.3"
-    oxfmt: "npm:^0.72.0"
-    oxlint: "npm:^1.83.0"
-    tinybench: "npm:^6.2.0"
-    typescript: "npm:^7.0.2"
-  languageName: unknown
-  linkType: soft
 
 "well-known-symbols@npm:^2.0.0":
   version: 2.0.0

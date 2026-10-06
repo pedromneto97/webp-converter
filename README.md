@@ -1,4 +1,4 @@
-# webp-converter
+# rust-webp-converter
 
 Converts images to WebP in Node.js. It is a native addon written in Rust with [napi-rs](https://napi.rs) and uses
 Google's [libwebp](https://chromium.googlesource.com/webm/libwebp).
@@ -15,7 +15,7 @@ Prebuilt binaries: macOS arm64, Linux x64/arm64 (glibc and musl), Windows x64. N
 ## Install
 
 ```bash
-npm install webp-converter
+npm install rust-webp-converter
 ```
 
 ## Usage
@@ -23,7 +23,7 @@ npm install webp-converter
 ```ts
 import { readFile, writeFile } from 'node:fs/promises'
 
-import { convert, convertFile } from 'webp-converter'
+import { convert, convertFile } from 'rust-webp-converter'
 
 // Buffer in, Buffer out
 const { data, quality, frameCount } = await convert(await readFile('photo.jpg'))
