@@ -1,20 +1,22 @@
 {
   "name": "webp-converter",
   "version": "1.0.0",
-  "description": "Template project for writing node package with napi-rs",
+  "description": "Fast image to WebP conversion for Node.js, with animated GIF support, powered by libwebp and napi-rs",
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/napi-rs/package-template.git"
+    "url": "git+https://github.com/pedromneto97/webp-converter.git"
   },
   "license": "MIT",
   "keywords": [
+    "webp",
+    "image",
+    "gif",
+    "animated-webp",
+    "libwebp",
+    "converter",
     "napi-rs",
-    "NAPI",
-    "N-API",
-    "Rust",
-    "node-addon",
-    "node-addon-api"
+    "node-addon"
   ],
   "files": [
     "index.d.ts",
@@ -54,21 +56,15 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@emnapi/core": "^2.0.0-alpha.5",
-    "@emnapi/runtime": "^2.0.0-alpha.5",
     "@napi-rs/cli": "^3.9.1",
-    "@napi-rs/wasm-runtime": "^1.2.4",
     "@oxc-node/core": "^0.1.2",
-    "@tybys/wasm-util": "^0.10.4",
+    "@types/node": "^26.6.4",
     "ava": "^8.0.1",
-    "chalk": "^6.0.0",
-    "emnapi": "^2.0.0-alpha.5",
     "husky": "^9.1.7",
     "lint-staged": "^17.5.1",
     "npm-run-all2": "^9.0.3",
-    "oxfmt": "^0.71.0",
+    "oxfmt": "^0.72.0",
     "oxlint": "^1.83.0",
-    "prettier": "^3.9.6",
     "tinybench": "^6.2.0",
     "typescript": "^7.0.2"
   },

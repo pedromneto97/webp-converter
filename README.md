@@ -1,87 +1,100 @@
-# `@napi-rs/package-template`
+# webp-converter
 
-![https://github.com/napi-rs/package-template/actions](https://github.com/napi-rs/package-template/workflows/CI/badge.svg)
+Converts images to WebP in Node.js. It is a native addon written in Rust with [napi-rs](https://napi.rs) and uses
+Google's [libwebp](https://chromium.googlesource.com/webm/libwebp).
 
-> Template project for writing node packages with napi-rs.
+- Reads any format the Rust [`image`](https://crates.io/crates/image) crate decodes, such as JPEG, PNG, GIF, BMP,
+  TIFF, WebP, AVIF and QOI. The format comes from the file's magic bytes, not from its extension.
+- Converts animated GIFs to animated WebP and keeps frame delays and loop count.
+- Picks the quality automatically: it encodes at several qualities and keeps the best size/quality ratio. You can also
+  set a fixed quality.
+- Runs on the libuv threadpool, so it does not block the event loop.
 
-# Usage
+Prebuilt binaries: macOS arm64, Linux x64/arm64 (glibc and musl), Windows x64. Node.js `>= 22.14`.
 
-1. Click **Use this template**.
-2. **Clone** your project.
-3. Run `yarn install` to install dependencies.
-4. Run `yarn napi rename -n [@your-scope/package-name] -b [binary-name]` command under the project folder to rename your package.
-
-## Install this test package
-
-```bash
-yarn add @napi-rs/package-template
-```
-
-## Ability
-
-### Build
-
-After `yarn build/npm run build` command, you can see `package-template.[darwin|win32|linux].node` file in project root. This is the native addon built from [lib.rs](./src/lib.rs).
-
-### Test
-
-With [ava](https://github.com/avajs/ava), run `yarn test/npm run test` to testing native addon. You can also switch to another testing framework if you want.
-
-### CI
-
-With GitHub Actions, each commit and pull request will be built and tested automatically in [`node@20`, `@node22`] x [`macOS`, `Linux`, `Windows`] matrix. You will never be afraid of the native addon broken in these platforms.
-
-### Release
-
-Release native package is very difficult in old days. Native packages may ask developers who use it to install `build toolchain` like `gcc/llvm`, `node-gyp` or something more.
-
-With `GitHub actions`, we can easily prebuild a `binary` for major platforms. And with `N-API`, we should never be afraid of **ABI Compatible**.
-
-The other problem is how to deliver prebuild `binary` to users. Downloading it in `postinstall` script is a common way that most packages do it right now. The problem with this solution is it introduced many other packages to download binary that has not been used by `runtime codes`. The other problem is some users may not easily download the binary from `GitHub/CDN` if they are behind a private network (But in most cases, they have a private NPM mirror).
-
-In this package, we choose a better way to solve this problem. We release different `npm packages` for different platforms. And add it to `optionalDependencies` before releasing the `Major` package to npm.
-
-`NPM` will choose which native package should download from `registry` automatically. You can see [npm](./npm) dir for details. And you can also run `yarn add @napi-rs/package-template` to see how it works.
-
-## Develop requirements
-
-- Install the latest `Rust`
-- Install `Node.js@10+` which fully supported `Node-API`
-- Install `yarn@1.x`
-
-## Test in local
-
-- yarn
-- yarn build
-- yarn test
-
-And you will see:
+## Install
 
 ```bash
-$ ava --verbose
-
-  ✔ sync function from native code
-  ✔ sleep function from native code (201ms)
-  ─
-
-  2 tests passed
-✨  Done in 1.12s.
+npm install webp-converter
 ```
 
-## Release package
+## Usage
 
-Ensure you have set your **NPM_TOKEN** in the `GitHub` project setting.
+```ts
+import { readFile, writeFile } from 'node:fs/promises'
 
-In `Settings -> Secrets`, add **NPM_TOKEN** into it.
+import { convert, convertFile } from 'webp-converter'
 
-When you want to release the package:
+// Buffer in, Buffer out
+const { data, quality, frameCount } = await convert(await readFile('photo.jpg'))
+await writeFile('photo.webp', data)
+
+// File in, file out
+await convertFile('animation.gif', 'animation.webp', { minQuality: 60 })
+
+// Fixed quality, no sweep
+await convert(input, { quality: 75 })
+```
+
+## API
+
+### `convert(input: Buffer, options?: ConvertOptions): Promise<ConvertResult>`
+
+Converts an encoded image to WebP.
+
+```ts
+interface ConvertResult {
+  data: Buffer // WebP file contents
+  quality: number // quality the output was encoded at (0-100)
+  frameCount: number // frames in the output; 1 for a still image
+}
+```
+
+### `convertFile(inputPath: string, outputPath: string, options?: ConvertOptions): Promise<ConvertFileResult>`
+
+Reads `inputPath`, converts it, and writes the WebP to `outputPath`. The result is `{ quality, frameCount }`.
+
+### `ConvertOptions`
+
+| Option       | Type     | Default | Description                                                           |
+| ------------ | -------- | ------- | --------------------------------------------------------------------- |
+| `minQuality` | `number` | `80`    | Lowest quality the sweep tries (integer, 0-100).                      |
+| `quality`    | `number` | —       | Encode once at this quality (integer, 0-100). Overrides `minQuality`. |
+
+## How it works
+
+**Quality sweep.** The converter encodes the image at several qualities from `minQuality` to 100. It keeps the output
+with the lowest `bytes / quality` ratio. Still images try every second quality level. Animations try at most 4 levels,
+because each level re-encodes every frame.
+
+**Animated GIFs.** The output is an animated WebP with the same frame delays and loop count. Delays have a 10 ms floor.
+libwebp merges identical consecutive frames, so `frameCount` can be lower than the GIF's frame count. If only one frame
+remains, the output is a still WebP and `frameCount` is `1`. A single-frame GIF is encoded as a still image.
+
+**Color types.** Grayscale, 16-bit and float images are converted to 8-bit RGB, or to RGBA when they have an alpha
+channel.
+
+**Limits.** WebP supports at most 16383 pixels on each axis. Larger images are rejected.
+
+## Errors
+
+- Invalid options make `convert` and `convertFile` throw synchronously, with `code` set to `InvalidArg`.
+- Conversion failures reject the promise with a descriptive message, for example
+  `Unsupported or unrecognized image format`, `Failed to decode image: …`, `Input file not found: …` or
+  `Image dimensions 20000x100 are outside the WebP limit of 16383x16383`.
+
+## Development
+
+Requires a Rust toolchain and a C compiler (libwebp is compiled from source).
 
 ```bash
-npm version [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease [--preid=<prerelease-id>] | from-git]
-
-git push
+yarn install
+yarn build      # release addon
+yarn test       # ava tests (build first)
+cargo test      # Rust unit tests
+yarn bench      # benchmarks
 ```
 
-GitHub actions will do the rest job for you.
+## License
 
-> WARN: Don't run `npm publish` manually.
+MIT

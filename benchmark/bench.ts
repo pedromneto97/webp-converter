@@ -1,19 +1,27 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { Bench } from 'tinybench'
 
-import { plus100 } from '../index.js'
+import { convert } from '../index.js'
 
-function add(a: number) {
-  return a + 100
-}
+const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '__test__', 'fixtures')
+const still = readFileSync(join(fixturesDir, 'rgb.jpg'))
+const animated = readFileSync(join(fixturesDir, 'animated.gif'))
 
 const b = new Bench()
 
-b.add('Native a + 100', () => {
-  plus100(10)
+b.add('still, quality sweep from 80', async () => {
+  await convert(still)
 })
 
-b.add('JavaScript a + 100', () => {
-  add(10)
+b.add('still, fixed quality 80', async () => {
+  await convert(still, { quality: 80 })
+})
+
+b.add('animated GIF, quality sweep from 80', async () => {
+  await convert(animated)
 })
 
 await b.run()

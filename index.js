@@ -4,6 +4,10 @@
 
 const { readFileSync } = require('fs')
 let nativeBinding = null
+// Which artifact actually loaded. The WASI fallback chain overwrites it with
+// the flavor it resolved; the late native retry below leaves it alone because
+// it only runs while no WASI candidate has been loaded.
+let __napiLoadedBindingTarget = 'native'
 const loadErrors = []
 
 const isMusl = () => {
@@ -62,20 +66,29 @@ const isMuslFromChildProcess = () => {
 function requireNative() {
   if (process.env.NAPI_RS_NATIVE_LIBRARY_PATH) {
     try {
-      return require(process.env.NAPI_RS_NATIVE_LIBRARY_PATH)
+      const overrideBinding = require(process.env.NAPI_RS_NATIVE_LIBRARY_PATH)
+      // The override may be a generated WASI loader, which already reports its
+      // own flavor. Adopt it: `module.exports` aliases this object, so claiming
+      // 'native' would both misreport the artifact and overwrite the loader's
+      // marker through the alias.
+      __napiLoadedBindingTarget =
+        overrideBinding && typeof overrideBinding.__napiBindingTarget === 'string'
+          ? overrideBinding.__napiBindingTarget
+          : 'native'
+      return overrideBinding
     } catch (err) {
       loadErrors.push(err)
     }
   } else if (process.platform === 'android') {
     if (process.arch === 'arm64') {
       try {
-        return require('./package-template.android-arm64.node')
+        return require('./webp-converter.android-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-android-arm64')
-        const bindingPackageVersion = require('@napi-rs/package-template-android-arm64/package.json').version
+        const binding = require('webp-converter-android-arm64')
+        const bindingPackageVersion = require('webp-converter-android-arm64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -85,13 +98,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm') {
       try {
-        return require('./package-template.android-arm-eabi.node')
+        return require('./webp-converter.android-arm-eabi.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-android-arm-eabi')
-        const bindingPackageVersion = require('@napi-rs/package-template-android-arm-eabi/package.json').version
+        const binding = require('webp-converter-android-arm-eabi')
+        const bindingPackageVersion = require('webp-converter-android-arm-eabi/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -106,13 +119,13 @@ function requireNative() {
     if (process.arch === 'x64') {
       if ((process.config && process.config.variables && process.config.variables.shlib_suffix === 'dll.a') || (process.config && process.config.variables && process.config.variables.node_target_type === 'shared_library')) {
         try {
-          return require('./package-template.win32-x64-gnu.node')
+          return require('./webp-converter.win32-x64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@napi-rs/package-template-win32-x64-gnu')
-          const bindingPackageVersion = require('@napi-rs/package-template-win32-x64-gnu/package.json').version
+          const binding = require('webp-converter-win32-x64-gnu')
+          const bindingPackageVersion = require('webp-converter-win32-x64-gnu/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -122,13 +135,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./package-template.win32-x64-msvc.node')
+          return require('./webp-converter.win32-x64-msvc.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@napi-rs/package-template-win32-x64-msvc')
-          const bindingPackageVersion = require('@napi-rs/package-template-win32-x64-msvc/package.json').version
+          const binding = require('webp-converter-win32-x64-msvc')
+          const bindingPackageVersion = require('webp-converter-win32-x64-msvc/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -139,13 +152,13 @@ function requireNative() {
       }
     } else if (process.arch === 'ia32') {
       try {
-        return require('./package-template.win32-ia32-msvc.node')
+        return require('./webp-converter.win32-ia32-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-win32-ia32-msvc')
-        const bindingPackageVersion = require('@napi-rs/package-template-win32-ia32-msvc/package.json').version
+        const binding = require('webp-converter-win32-ia32-msvc')
+        const bindingPackageVersion = require('webp-converter-win32-ia32-msvc/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -155,13 +168,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./package-template.win32-arm64-msvc.node')
+        return require('./webp-converter.win32-arm64-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-win32-arm64-msvc')
-        const bindingPackageVersion = require('@napi-rs/package-template-win32-arm64-msvc/package.json').version
+        const binding = require('webp-converter-win32-arm64-msvc')
+        const bindingPackageVersion = require('webp-converter-win32-arm64-msvc/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -174,13 +187,13 @@ function requireNative() {
     }
   } else if (process.platform === 'darwin') {
     try {
-      return require('./package-template.darwin-universal.node')
+      return require('./webp-converter.darwin-universal.node')
     } catch (e) {
       loadErrors.push(e)
     }
     try {
-      const binding = require('@napi-rs/package-template-darwin-universal')
-      const bindingPackageVersion = require('@napi-rs/package-template-darwin-universal/package.json').version
+      const binding = require('webp-converter-darwin-universal')
+      const bindingPackageVersion = require('webp-converter-darwin-universal/package.json').version
       if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
         throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
       }
@@ -190,13 +203,13 @@ function requireNative() {
     }
     if (process.arch === 'x64') {
       try {
-        return require('./package-template.darwin-x64.node')
+        return require('./webp-converter.darwin-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-darwin-x64')
-        const bindingPackageVersion = require('@napi-rs/package-template-darwin-x64/package.json').version
+        const binding = require('webp-converter-darwin-x64')
+        const bindingPackageVersion = require('webp-converter-darwin-x64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -206,13 +219,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./package-template.darwin-arm64.node')
+        return require('./webp-converter.darwin-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-darwin-arm64')
-        const bindingPackageVersion = require('@napi-rs/package-template-darwin-arm64/package.json').version
+        const binding = require('webp-converter-darwin-arm64')
+        const bindingPackageVersion = require('webp-converter-darwin-arm64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -226,13 +239,13 @@ function requireNative() {
   } else if (process.platform === 'freebsd') {
     if (process.arch === 'x64') {
       try {
-        return require('./package-template.freebsd-x64.node')
+        return require('./webp-converter.freebsd-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-freebsd-x64')
-        const bindingPackageVersion = require('@napi-rs/package-template-freebsd-x64/package.json').version
+        const binding = require('webp-converter-freebsd-x64')
+        const bindingPackageVersion = require('webp-converter-freebsd-x64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -242,13 +255,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./package-template.freebsd-arm64.node')
+        return require('./webp-converter.freebsd-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-freebsd-arm64')
-        const bindingPackageVersion = require('@napi-rs/package-template-freebsd-arm64/package.json').version
+        const binding = require('webp-converter-freebsd-arm64')
+        const bindingPackageVersion = require('webp-converter-freebsd-arm64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -263,13 +276,13 @@ function requireNative() {
     if (process.arch === 'x64') {
       if (isMusl()) {
         try {
-          return require('./package-template.linux-x64-musl.node')
+          return require('./webp-converter.linux-x64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@napi-rs/package-template-linux-x64-musl')
-          const bindingPackageVersion = require('@napi-rs/package-template-linux-x64-musl/package.json').version
+          const binding = require('webp-converter-linux-x64-musl')
+          const bindingPackageVersion = require('webp-converter-linux-x64-musl/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -279,13 +292,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./package-template.linux-x64-gnu.node')
+          return require('./webp-converter.linux-x64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@napi-rs/package-template-linux-x64-gnu')
-          const bindingPackageVersion = require('@napi-rs/package-template-linux-x64-gnu/package.json').version
+          const binding = require('webp-converter-linux-x64-gnu')
+          const bindingPackageVersion = require('webp-converter-linux-x64-gnu/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -297,13 +310,13 @@ function requireNative() {
     } else if (process.arch === 'arm64') {
       if (isMusl()) {
         try {
-          return require('./package-template.linux-arm64-musl.node')
+          return require('./webp-converter.linux-arm64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@napi-rs/package-template-linux-arm64-musl')
-          const bindingPackageVersion = require('@napi-rs/package-template-linux-arm64-musl/package.json').version
+          const binding = require('webp-converter-linux-arm64-musl')
+          const bindingPackageVersion = require('webp-converter-linux-arm64-musl/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -313,13 +326,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./package-template.linux-arm64-gnu.node')
+          return require('./webp-converter.linux-arm64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@napi-rs/package-template-linux-arm64-gnu')
-          const bindingPackageVersion = require('@napi-rs/package-template-linux-arm64-gnu/package.json').version
+          const binding = require('webp-converter-linux-arm64-gnu')
+          const bindingPackageVersion = require('webp-converter-linux-arm64-gnu/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -331,13 +344,13 @@ function requireNative() {
     } else if (process.arch === 'arm') {
       if (isMusl()) {
         try {
-          return require('./package-template.linux-arm-musleabihf.node')
+          return require('./webp-converter.linux-arm-musleabihf.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@napi-rs/package-template-linux-arm-musleabihf')
-          const bindingPackageVersion = require('@napi-rs/package-template-linux-arm-musleabihf/package.json').version
+          const binding = require('webp-converter-linux-arm-musleabihf')
+          const bindingPackageVersion = require('webp-converter-linux-arm-musleabihf/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -347,13 +360,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./package-template.linux-arm-gnueabihf.node')
+          return require('./webp-converter.linux-arm-gnueabihf.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@napi-rs/package-template-linux-arm-gnueabihf')
-          const bindingPackageVersion = require('@napi-rs/package-template-linux-arm-gnueabihf/package.json').version
+          const binding = require('webp-converter-linux-arm-gnueabihf')
+          const bindingPackageVersion = require('webp-converter-linux-arm-gnueabihf/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -365,13 +378,13 @@ function requireNative() {
     } else if (process.arch === 'loong64') {
       if (isMusl()) {
         try {
-          return require('./package-template.linux-loong64-musl.node')
+          return require('./webp-converter.linux-loong64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@napi-rs/package-template-linux-loong64-musl')
-          const bindingPackageVersion = require('@napi-rs/package-template-linux-loong64-musl/package.json').version
+          const binding = require('webp-converter-linux-loong64-musl')
+          const bindingPackageVersion = require('webp-converter-linux-loong64-musl/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -381,13 +394,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./package-template.linux-loong64-gnu.node')
+          return require('./webp-converter.linux-loong64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@napi-rs/package-template-linux-loong64-gnu')
-          const bindingPackageVersion = require('@napi-rs/package-template-linux-loong64-gnu/package.json').version
+          const binding = require('webp-converter-linux-loong64-gnu')
+          const bindingPackageVersion = require('webp-converter-linux-loong64-gnu/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -399,13 +412,13 @@ function requireNative() {
     } else if (process.arch === 'riscv64') {
       if (isMusl()) {
         try {
-          return require('./package-template.linux-riscv64-musl.node')
+          return require('./webp-converter.linux-riscv64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@napi-rs/package-template-linux-riscv64-musl')
-          const bindingPackageVersion = require('@napi-rs/package-template-linux-riscv64-musl/package.json').version
+          const binding = require('webp-converter-linux-riscv64-musl')
+          const bindingPackageVersion = require('webp-converter-linux-riscv64-musl/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -415,13 +428,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./package-template.linux-riscv64-gnu.node')
+          return require('./webp-converter.linux-riscv64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('@napi-rs/package-template-linux-riscv64-gnu')
-          const bindingPackageVersion = require('@napi-rs/package-template-linux-riscv64-gnu/package.json').version
+          const binding = require('webp-converter-linux-riscv64-gnu')
+          const bindingPackageVersion = require('webp-converter-linux-riscv64-gnu/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -432,13 +445,13 @@ function requireNative() {
       }
     } else if (process.arch === 'ppc64') {
       try {
-        return require('./package-template.linux-ppc64-gnu.node')
+        return require('./webp-converter.linux-ppc64-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-linux-ppc64-gnu')
-        const bindingPackageVersion = require('@napi-rs/package-template-linux-ppc64-gnu/package.json').version
+        const binding = require('webp-converter-linux-ppc64-gnu')
+        const bindingPackageVersion = require('webp-converter-linux-ppc64-gnu/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -448,13 +461,13 @@ function requireNative() {
       }
     } else if (process.arch === 's390x') {
       try {
-        return require('./package-template.linux-s390x-gnu.node')
+        return require('./webp-converter.linux-s390x-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-linux-s390x-gnu')
-        const bindingPackageVersion = require('@napi-rs/package-template-linux-s390x-gnu/package.json').version
+        const binding = require('webp-converter-linux-s390x-gnu')
+        const bindingPackageVersion = require('webp-converter-linux-s390x-gnu/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -468,13 +481,13 @@ function requireNative() {
   } else if (process.platform === 'openharmony') {
     if (process.arch === 'arm64') {
       try {
-        return require('./package-template.openharmony-arm64.node')
+        return require('./webp-converter.openharmony-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-openharmony-arm64')
-        const bindingPackageVersion = require('@napi-rs/package-template-openharmony-arm64/package.json').version
+        const binding = require('webp-converter-openharmony-arm64')
+        const bindingPackageVersion = require('webp-converter-openharmony-arm64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -484,13 +497,13 @@ function requireNative() {
       }
     } else if (process.arch === 'x64') {
       try {
-        return require('./package-template.openharmony-x64.node')
+        return require('./webp-converter.openharmony-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-openharmony-x64')
-        const bindingPackageVersion = require('@napi-rs/package-template-openharmony-x64/package.json').version
+        const binding = require('webp-converter-openharmony-x64')
+        const bindingPackageVersion = require('webp-converter-openharmony-x64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -500,13 +513,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm') {
       try {
-        return require('./package-template.openharmony-arm.node')
+        return require('./webp-converter.openharmony-arm.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('@napi-rs/package-template-openharmony-arm')
-        const bindingPackageVersion = require('@napi-rs/package-template-openharmony-arm/package.json').version
+        const binding = require('webp-converter-openharmony-arm')
+        const bindingPackageVersion = require('webp-converter-openharmony-arm/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -627,6 +640,7 @@ if (!nativeBinding || forceWasi) {
       if (!candidateFailed) {
         wasiBinding = require('./webp-converter.wasi.cjs')
         nativeBinding = wasiBinding
+        __napiLoadedBindingTarget = 'wasm32-wasi'
         wasiBindingLoaded = true
       }
     } catch (err) {
@@ -642,17 +656,18 @@ if (!nativeBinding || forceWasi) {
     let candidateError = null
     let candidateFailed = false
     try {
-      candidateError = __napiWasiResolveCandidate('@napi-rs/package-template-wasm32-wasi', true, undefined)
+      candidateError = __napiWasiResolveCandidate('webp-converter-wasm32-wasi', true, undefined)
       candidateFailed = candidateError !== null
       if (!candidateFailed) {
         if (process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          const bindingPackageVersion = require('@napi-rs/package-template-wasm32-wasi/package.json').version
+          const bindingPackageVersion = require('webp-converter-wasm32-wasi/package.json').version
           if (bindingPackageVersion !== '1.0.0') {
             throw new Error(`WASI binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
         }
-        wasiBinding = require('@napi-rs/package-template-wasm32-wasi')
+        wasiBinding = require('webp-converter-wasm32-wasi')
         nativeBinding = wasiBinding
+        __napiLoadedBindingTarget = 'wasm32-wasi'
         wasiBindingLoaded = true
       }
     } catch (err) {
@@ -698,5 +713,70 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
+function __napiStampBindingTarget(exportsObject, target) {
+  if (
+    Object.prototype.hasOwnProperty.call(exportsObject, '__napiBindingTarget')
+  ) {
+    if (exportsObject.__napiBindingTarget === target) {
+      // Already ours: the root entry aliases the object it loaded, so a WASI
+      // fallback candidate — or a `NAPI_RS_NATIVE_LIBRARY_PATH` override that
+      // is a generated loader — arrives already stamped with this same value.
+      return target
+    }
+    const error = new Error(
+      '`__napiBindingTarget` is reserved by the generated binding loader, but the loaded binding already exports it. Rename the export, e.g. #[napi(js_name = "...")].',
+    )
+    error.code = 'ERR_NAPI_BINDING_TARGET_CONFLICT'
+    throw error
+  }
+  if (!Object.isExtensible(exportsObject)) {
+    // A `#[napi(module_exports)]` hook may seal or freeze this object
+    // (`Object::seal` / `Object::freeze`). Reporting the artifact is metadata,
+    // never a reason to fail an otherwise successful load, so the stamp is
+    // skipped. What a consumer still sees then follows the entry point: the
+    // browser and deferred loaders declare `__napiBindingTarget` at module
+    // level and go on reporting it, while the CommonJS entries hand back this
+    // very object as `module.exports`, so there the value is absent.
+    return target
+  }
+  try {
+    // [[Define]], not [[Set]]: an ordinary assignment walks the prototype
+    // chain, so an inherited accessor could swallow the value or throw and
+    // fail an otherwise successful load. The descriptor is what a successful
+    // assignment would have produced.
+    Object.defineProperty(exportsObject, '__napiBindingTarget', {
+      configurable: true,
+      enumerable: true,
+      value: target,
+      writable: true,
+    })
+  } catch {
+    // Same rule as the non-extensible skip above: reporting the artifact is
+    // metadata, never a reason to fail an otherwise successful load. An exotic
+    // object (a Proxy whose defineProperty trap refuses) is skipped, not
+    // thrown over.
+  }
+  // The CommonJS loaders assign this return value so `cjs-module-lexer` — and
+  // therefore Node's CJS -> ESM named export detection — can see
+  // `__napiBindingTarget` statically.
+  return target
+}
+// Stamp before the alias, not after. The guard only reads `nativeBinding`
+// (`hasOwnProperty` plus a comparison), which is safe against any addon
+// accessor; an assignment is not, because a `#[napi(module_exports)]` hook can
+// expose a getter reporting this very value and a setter that throws. So the
+// assignment lands on the loader's own `module.exports`, still the original
+// object here, and the alias below replaces it.
+//
+// The assignment is what keeps the marker a statically visible CommonJS export:
+// `cjs-module-lexer` is Node's CJS -> ESM named export detection, it cannot see
+// a bare call, and the later `module.exports = nativeBinding` does not undo the
+// detection. The assignment itself always succeeds — its target is this
+// loader's own, still extensible `module.exports` — and the alias below then
+// discards the value it wrote. What a consumer reads is whatever the guard put
+// on `nativeBinding`, so on a frozen binding, where the guard skips, the
+// linked import resolves to `undefined`.
+module.exports.__napiBindingTarget = __napiStampBindingTarget(nativeBinding, __napiLoadedBindingTarget)
 module.exports = nativeBinding
-module.exports.plus100 = nativeBinding.plus100
+module.exports.convert = nativeBinding.convert
+module.exports.convertFile = nativeBinding.convertFile
