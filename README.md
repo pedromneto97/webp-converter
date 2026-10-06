@@ -3,14 +3,16 @@
 Converts images to WebP in Node.js. It is a native addon written in Rust with [napi-rs](https://napi.rs) and uses
 Google's [libwebp](https://chromium.googlesource.com/webm/libwebp).
 
-- Reads any format the Rust [`image`](https://crates.io/crates/image) crate decodes, such as JPEG, PNG, GIF, BMP,
-  TIFF, WebP, AVIF and QOI. The format comes from the file's magic bytes, not from its extension.
+- Reads JPEG, PNG, GIF, BMP, TIFF, WebP, QOI, ICO, TGA, PNM, DDS, OpenEXR, Radiance HDR and Farbfeld, decoded by the
+  Rust [`image`](https://crates.io/crates/image) crate. The format comes from the file's magic bytes, not from its
+  extension. AVIF is not supported as input.
 - Converts animated GIFs to animated WebP and keeps frame delays and loop count.
 - Picks the quality automatically: it encodes at several qualities and keeps the best size/quality ratio. You can also
   set a fixed quality.
 - Runs on the libuv threadpool, so it does not block the event loop.
 
-Prebuilt binaries: macOS arm64, Linux x64/arm64 (glibc and musl), Windows x64. Node.js `>= 22.14`.
+Prebuilt binaries: macOS arm64, Linux x64/arm64 (glibc and musl), Windows x64. Node.js `>= 22.14`. The list matches
+`napi.targets` in `package.json`.
 
 ## Install
 
@@ -54,6 +56,8 @@ interface ConvertResult {
 
 Reads `inputPath`, converts it, and writes the WebP to `outputPath`. The result is `{ quality, frameCount }`.
 
+`outputPath` is overwritten if it exists. The parent directory must already exist, otherwise the promise rejects.
+
 ### `ConvertOptions`
 
 | Option       | Type     | Default | Description                                                           |
@@ -80,8 +84,8 @@ channel.
 
 - Invalid options make `convert` and `convertFile` throw synchronously, with `code` set to `InvalidArg`.
 - Conversion failures reject the promise with a descriptive message, for example
-  `Unsupported or unrecognized image format`, `Failed to decode image: …`, `Input file not found: …` or
-  `Image dimensions 20000x100 are outside the WebP limit of 16383x16383`.
+  `Unsupported or unrecognized image format`, `Failed to decode image: …`, `Input file not found: …`,
+  `Failed to write output file: …` or `Image dimensions 20000x100 are outside the WebP limit of 16383x16383`.
 
 ## Development
 

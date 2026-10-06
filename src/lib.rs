@@ -17,6 +17,7 @@ use crate::{
   error::ConverterError,
 };
 
+/// Options for `convert` and `convertFile`. Every field is optional.
 #[napi(object)]
 #[derive(Default)]
 pub struct ConvertOptions {
@@ -28,6 +29,7 @@ pub struct ConvertOptions {
   pub quality: Option<f64>,
 }
 
+/// Result of `convert`.
 #[napi(object)]
 pub struct ConvertResult {
   /// The WebP file contents.
@@ -38,6 +40,7 @@ pub struct ConvertResult {
   pub frame_count: u32,
 }
 
+/// Result of `convertFile`. The WebP itself is written to `outputPath`.
 #[napi(object)]
 pub struct ConvertFileResult {
   /// The quality the output was encoded at (0-100).
@@ -147,7 +150,8 @@ pub fn convert(input: Buffer, options: Option<ConvertOptions>) -> Result<AsyncTa
 /// to `outputPath`.
 ///
 /// Same conversion rules as `convert`. File IO also runs on the libuv
-/// threadpool.
+/// threadpool. Overwrites `outputPath` if it exists; its parent directory must
+/// already exist.
 #[napi(ts_return_type = "Promise<ConvertFileResult>")]
 pub fn convert_file(
   input_path: String,
