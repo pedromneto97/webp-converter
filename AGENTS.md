@@ -18,18 +18,18 @@ library consumed from Dart/Flutter). JS exports: `convert(buffer, options?)` and
 Yarn 4 (vendored in `.yarn/releases`, `nodeLinker: node-modules`). Node `>= 22.14`. Requires a Rust toolchain and
 a C compiler (the crate compiles libwebp's C sources at build time).
 
-| Task                | Command                                                                                                     |
-| ------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Install             | `yarn install`                                                                                              |
-| Build release addon | `yarn build` (`napi build --platform --release`)                                                            |
-| Build debug addon   | `yarn build:debug`                                                                                          |
-| JS/TS tests (ava)   | `yarn test` — **build first**; tests load the compiled `.node` file through `index.js`                      |
-| Single ava test     | `yarn test -m 'test title glob'` or `yarn test __test__/index.spec.ts`                                      |
-| Rust unit tests     | `cargo test` / `cargo test <name>`                                                                          |
-| Benchmark           | `yarn bench` (tinybench, `benchmark/bench.ts`)                                                              |
-| Lint                | `yarn lint` (oxlint) and `cargo clippy`                                                                     |
-| Format              | `yarn format` (oxfmt + `cargo fmt`); CI checks `cargo fmt -- --check`                                       |
-| Cross-build         | `yarn build --target <triple>`; CI uses `--use-napi-cross` for linux-gnu and `-x` (cargo-zigbuild) for musl |
+| Task                | Command                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Install             | `yarn install`                                                                                             |
+| Build release addon | `yarn build` (`napi build --platform --release`)                                                           |
+| Build debug addon   | `yarn build:debug`                                                                                         |
+| JS/TS tests (ava)   | `yarn test` — **build first**; tests load the compiled `.node` file through `index.js`                     |
+| Single ava test     | `yarn test -m 'test title glob'` or `yarn test __test__/index.spec.ts`                                     |
+| Rust unit tests     | `cargo test` / `cargo test <name>`                                                                         |
+| Benchmark           | `yarn bench` (tinybench, `benchmark/bench.ts`)                                                             |
+| Lint                | `yarn lint` (oxlint) and `cargo clippy`                                                                    |
+| Format              | `yarn format` (oxfmt + `cargo fmt`); CI checks `cargo fmt -- --check`                                      |
+| Cross-build         | `yarn build --target <triple>`; CI uses `--use-napi-cross` for x64 gnu, `-x` (zigbuild) for arm64 gnu/musl |
 
 A husky pre-commit hook runs `lint-staged` (oxlint `--fix` + oxfmt on staged files).
 
