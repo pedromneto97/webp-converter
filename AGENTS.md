@@ -95,6 +95,13 @@ Keep these points when changing the converter:
 
 ## Release
 
-CI (`.github/workflows/CI.yml`) lints, builds every target, tests on Node 22/24/26, then publishes. Publishing happens
-only when the head commit message is a bare semver: `x.y.z` publishes to `latest`, and `x.y.z-…` publishes to `next`.
-Use `npm version <bump>` and push. Do not run `npm publish` manually. CI needs the `NPM_TOKEN` secret.
+Releases use [release-please](https://github.com/googleapis/release-please) (`release-please-config.json`,
+`.release-please-manifest.json`). Commit with [Conventional Commits](https://www.conventionalcommits.org). On every
+push to `main`, `.github/workflows/release.yaml` runs the reusable CI (`.github/workflows/CI.yml`: lint, build matrix,
+tests). If it passes, the `release-please` job opens or updates a release PR that bumps `package.json`, `Cargo.toml`,
+`Cargo.lock` and `CHANGELOG.md`. Merging that PR creates the tag and GitHub release, and the `publish` job then
+reuses the CI build artifacts and runs `npm publish`
+(`prepublishOnly` runs `napi prepublish`, which publishes the per-platform packages). Do not run `npm publish` or
+`npm version` manually. The npm package is `rust-webp-converter`. CI needs the `NPM_TOKEN` secret. Add an optional
+`RELEASE_PLEASE_TOKEN` PAT secret so CI also runs on the release PR, because PRs opened with `GITHUB_TOKEN` do not
+trigger workflows.
