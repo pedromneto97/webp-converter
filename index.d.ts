@@ -26,7 +26,8 @@ export declare function convert(input: Buffer, options?: ConvertOptions | undefi
  * to `outputPath`.
  *
  * Same conversion rules as `convert`. File IO also runs on the libuv
- * threadpool.
+ * threadpool. Overwrites `outputPath` if it exists; its parent directory must
+ * already exist.
  */
 export declare function convertFile(
   inputPath: string,
@@ -34,6 +35,7 @@ export declare function convertFile(
   options?: ConvertOptions | undefined | null,
 ): Promise<ConvertFileResult>
 
+/** Result of `convertFile`. The WebP itself is written to `outputPath`. */
 export interface ConvertFileResult {
   /** The quality the output was encoded at (0-100). */
   quality: number
@@ -41,6 +43,7 @@ export interface ConvertFileResult {
   frameCount: number
 }
 
+/** Options for `convert` and `convertFile`. Every field is optional. */
 export interface ConvertOptions {
   /**
    * Lowest quality the sweep tries, an integer from 0 to 100. Defaults to 80.
@@ -54,6 +57,7 @@ export interface ConvertOptions {
   quality?: number
 }
 
+/** Result of `convert`. */
 export interface ConvertResult {
   /** The WebP file contents. */
   data: Buffer
