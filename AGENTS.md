@@ -101,7 +101,25 @@ push to `main`, `.github/workflows/release.yaml` runs the reusable CI (`.github/
 tests). If it passes, the `release-please` job opens or updates a release PR that bumps `package.json`, `Cargo.toml`,
 `Cargo.lock` and `CHANGELOG.md`. Merging that PR creates the tag and GitHub release, and the `publish` job then
 reuses the CI build artifacts and runs `npm publish`
-(`prepublishOnly` runs `napi prepublish`, which publishes the per-platform packages). Do not run `npm publish` or
-`npm version` manually. The npm package is `rust-webp-converter`. CI needs the `NPM_TOKEN` secret. Add an optional
-`RELEASE_PLEASE_TOKEN` PAT secret so CI also runs on the release PR, because PRs opened with `GITHUB_TOKEN` do not
-trigger workflows.
+(`prepublishOnly` runs `napi prepublish --no-gh-release`, which publishes the per-platform packages). Do not run
+`npm publish` or `npm version` manually. The npm package is `rust-webp-converter`.
+
+Publishing uses npm trusted publishing (OIDC) from the `npm` GitHub environment, so there is no npm token secret. Each of
+the 7 packages (`rust-webp-converter` and the 6 `rust-webp-converter-*` platform packages) needs a trusted publisher on
+npmjs.com for workflow `release.yaml` and environment `npm`. A new platform target needs its package created and its
+trusted publisher added before the first release that includes it. Add an optional `RELEASE_PLEASE_TOKEN` PAT secret so
+CI also runs on the release PR, because PRs opened with `GITHUB_TOKEN` do not trigger workflows.
+
+## CI and supply chain
+
+- Pin every action to a full commit SHA with a `# vX` comment. Dependabot (`.github/dependabot.yml`) updates the SHAs.
+- Checkout uses `persist-credentials: false`. Pass `${{ … }}` values to `run:` scripts through `env:`, never inline.
+- Release runs (push to `main`) skip caches. Builds use `--locked`, installs use `yarn install --immutable`.
+- `.yarnrc.yml` disables dependency install scripts and enforces a 3-day package age gate. This package's own
+  `rust-webp-converter-*` platform packages are exempt, because the release references them right after publishing.
+- `Cargo.lock` and `yarn.lock` are committed. After changing `package.json` dependencies, run `yarn install` and
+  commit `yarn.lock`, or the immutable install in CI fails.
+- The `Audit` CI job runs zizmor on the workflows and `cargo deny check advisories`. Run zizmor locally with
+  `uvx zizmor .github/workflows`.
+- Dependabot commit prefixes drive release-please: Rust crate bumps use `fix(deps)` (they change the shipped binary,
+  so they release a patch). npm bumps use `chore(deps)`, and action bumps use `ci(deps)`.

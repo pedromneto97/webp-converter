@@ -55,8 +55,13 @@ section.
 
 ## Supply chain
 
-- Releases are created by release-please and published from GitHub Actions only, with npm provenance enabled. Verify
-  with `npm audit signatures`.
-- Prebuilt binaries are built in CI from the tagged commit, for the targets listed in `package.json` under
-  `napi.targets`. The package has no install scripts and downloads nothing at install time.
-- Dependencies are pinned in `Cargo.lock` and `yarn.lock` and updated through Renovate.
+- Releases are created by release-please and published from GitHub Actions only, through npm trusted publishing (OIDC,
+  no long-lived npm token) with provenance. Verify with `npm audit signatures`.
+- Prebuilt binaries are built in CI from the release commit, with `cargo build --locked` and without restored caches,
+  for the targets listed in `package.json` under `napi.targets`. The package has no install scripts and downloads
+  nothing at install time.
+- Dependencies are pinned in `Cargo.lock` and `yarn.lock` and updated through Dependabot, which waits 3 days before it
+  proposes a new version. Yarn also refuses package versions younger than 3 days and does not run dependency install
+  scripts.
+- GitHub Actions are pinned to commit SHAs. CI audits the workflows with zizmor and the Rust dependencies with
+  `cargo deny check advisories`.
