@@ -13,7 +13,7 @@ concurrency:
 jobs:
   ci:
     name: CI
-    uses: ./.github/workflows/CI.yml
+    uses: $/.github/workflows/CI.yml
   release-please:
     name: Release Please
     needs: ci
