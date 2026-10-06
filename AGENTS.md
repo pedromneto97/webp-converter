@@ -74,15 +74,21 @@ Keep these points when changing the converter:
   Report the frame count by demuxing the output (`WebPDemuxGetI(…, WEBP_FF_FRAME_COUNT)`), not by counting decoded
   frames. A GIF that decodes to a single frame falls back to the still path.
 - **Limits:** check both axes against `WEBP_MAX_DIMENSION` (16383) yourself, because the anim encoder only checks
-  total area. Before `WebPPictureImportRGBA`, check that the RGBA buffer is at least `width * height * 4` bytes;
+  total area. Still images read the header first (`into_decoder` + `dimensions`) and are rejected before any pixel
+  allocation. Then every decoder gets `decode_limits()` (16383 per axis, 512 MiB), including the GIF decoder,
+  which starts with no limits. Before `WebPPictureImportRGBA`, check that the RGBA buffer is at least `width * height * 4` bytes;
   libwebp reads straight off the pointer.
 - **Memory safety:** every libwebp-owned resource is wrapped in a small RAII type with `Drop` (`WebPFree`,
   `WebPAnimEncoderDelete`, `WebPPictureFree`, `WebPDataClear`, `WebPDemuxDelete`) so `?` early returns cannot leak.
   The demuxer borrows the assembled bytes, so keep it lifetime-tied to them.
 - **Errors:** the reference maps a `ConverterError` enum to integer codes for Dart. Here, `ConverterError` converts to
   `napi::Error` with a descriptive message (`InvalidArg` status for bad options, `GenericFailure` otherwise).
+- **Orientation:** still images apply the EXIF orientation (`decoder.orientation()` + `apply_orientation`), because
+  the output carries no metadata. Broken EXIF falls back to no transform.
 - **Node-specific:** encoding is CPU-heavy (a full quality sweep), so it runs in a napi `AsyncTask` on the libuv
-  threadpool. Options are validated synchronously, before the task is queued.
+  threadpool. Options are validated synchronously, before the task is queued. `convert` copies the input `Buffer`
+  before queueing, because JS can still write to it. `compute` runs inside `catch_panic`, because napi-rs does not
+  catch panics on the worker thread and an unwinding panic there aborts Node.
 
 ## Conventions
 
@@ -90,6 +96,9 @@ Keep these points when changing the converter:
 - JS/TS formatting (oxfmt): 120 columns, no semicolons, single quotes, trailing commas.
 - Tests are TypeScript, run through `@oxc-node/core/register` with `__test__/tsconfig.json` (ESM). The root
   `tsconfig.json` excludes `__test__`.
+- Public docs that must stay in sync with the API: `README.md`, `llms.txt` (shipped in the npm package for AI tools),
+  `examples/`, the doc comments in `src/lib.rs` (they become the JSDoc in `index.d.ts`) and the error list in
+  `src/error.rs`.
 - Test fixtures live in `__test__/fixtures/`. Rust unit tests build their images in memory instead.
 - No WASI target: `libwebp-sys` compiles C sources, and `napi.targets` has no wasm entry.
 

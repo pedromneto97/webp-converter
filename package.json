@@ -25,7 +25,8 @@
   ],
   "files": [
     "index.d.ts",
-    "index.js"
+    "index.js",
+    "llms.txt"
   ],
   "napi": {
     "binaryName": "webp-converter",
