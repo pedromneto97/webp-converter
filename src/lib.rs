@@ -4,7 +4,11 @@ mod converter;
 mod error;
 mod webp;
 
-use std::{fs, io::ErrorKind};
+use std::{
+  fs,
+  io::ErrorKind,
+  panic::{catch_unwind, AssertUnwindSafe},
+};
 
 use napi::{
   bindgen_prelude::{AsyncTask, Buffer},
@@ -76,8 +80,27 @@ fn to_quality(options: Option<ConvertOptions>) -> std::result::Result<Quality, C
   Ok(Quality::Sweep { min })
 }
 
+/// Runs `work`, turning a panic (for example inside an image decoder) into an
+/// error. A panic that unwinds out of a libuv worker thread would abort the
+/// whole Node.js process instead of rejecting the promise.
+fn catch_panic<T>(
+  work: impl FnOnce() -> std::result::Result<T, ConverterError>,
+) -> std::result::Result<T, ConverterError> {
+  catch_unwind(AssertUnwindSafe(work)).unwrap_or_else(|payload| {
+    let message = payload
+      .downcast_ref::<&str>()
+      .map(|message| message.to_string())
+      .or_else(|| payload.downcast_ref::<String>().cloned())
+      .unwrap_or_else(|| "unknown panic".to_string());
+
+    Err(ConverterError::Internal(message))
+  })
+}
+
 pub struct ConvertTask {
-  input: Buffer,
+  /// A private copy of the input. The JS `Buffer` stays writable from JS while
+  /// the task runs on a worker thread, so reading it in place would race.
+  input: Vec<u8>,
   quality: Quality,
 }
 
@@ -86,7 +109,9 @@ impl Task for ConvertTask {
   type JsValue = ConvertResult;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    Ok(converter::convert(&self.input, self.quality)?)
+    Ok(catch_panic(|| {
+      converter::convert(&self.input, self.quality)
+    })?)
   }
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
@@ -114,7 +139,7 @@ impl Task for ConvertFileTask {
       _ => ConverterError::FailedToReadInput(format!("{}: {error}", self.input_path)),
     })?;
 
-    let converted = converter::convert(&input, self.quality)?;
+    let converted = catch_panic(|| converter::convert(&input, self.quality))?;
 
     fs::write(&self.output_path, &converted.data).map_err(|error| {
       ConverterError::FailedToWriteOutput(format!("{}: {error}", self.output_path))
@@ -143,7 +168,10 @@ impl Task for ConvertFileTask {
 pub fn convert(input: Buffer, options: Option<ConvertOptions>) -> Result<AsyncTask<ConvertTask>> {
   let quality = to_quality(options)?;
 
-  Ok(AsyncTask::new(ConvertTask { input, quality }))
+  Ok(AsyncTask::new(ConvertTask {
+    input: input.to_vec(),
+    quality,
+  }))
 }
 
 /// Reads the image at `inputPath`, converts it to WebP and writes the result
@@ -169,8 +197,8 @@ pub fn convert_file(
 
 #[cfg(test)]
 mod tests {
-  use super::{to_quality, ConvertOptions};
-  use crate::converter::Quality;
+  use super::{catch_panic, to_quality, ConvertOptions};
+  use crate::{converter::Quality, error::ConverterError};
 
   #[test]
   fn defaults_to_the_reference_sweep() {
@@ -209,5 +237,15 @@ mod tests {
     ] {
       assert!(to_quality(Some(options)).is_err());
     }
+  }
+
+  #[test]
+  fn turns_a_panic_into_an_error() {
+    let result: Result<(), _> = catch_panic(|| panic!("decoder exploded"));
+
+    assert!(matches!(
+      result,
+      Err(ConverterError::Internal(message)) if message == "decoder exploded"
+    ));
   }
 }

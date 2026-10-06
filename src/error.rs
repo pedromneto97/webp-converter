@@ -12,6 +12,7 @@ pub enum ConverterError {
   FailedToWriteOutput(String),
   FailedToDecodeAnimation(String),
   AnimationEncodingFailed,
+  Internal(String),
 }
 
 impl fmt::Display for ConverterError {
@@ -33,6 +34,7 @@ impl fmt::Display for ConverterError {
         write!(f, "Failed to decode GIF animation: {message}")
       }
       Self::AnimationEncodingFailed => write!(f, "Animated WebP encoding failed"),
+      Self::Internal(message) => write!(f, "Internal error during conversion: {message}"),
     }
   }
 }

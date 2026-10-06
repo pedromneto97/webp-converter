@@ -1,12 +1,13 @@
 use std::io::Cursor;
 
 use image::{
-  codecs::gif::GifDecoder, metadata::LoopCount, AnimationDecoder, Delay, DynamicImage,
-  ImageDecoder, ImageFormat, ImageReader,
+  codecs::gif::GifDecoder,
+  metadata::{LoopCount, Orientation},
+  AnimationDecoder, Delay, DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits,
 };
 use libwebp_sys::{
   WebPAnimEncoderAdd, WebPAnimEncoderAssemble, WebPAnimEncoderOptions,
-  WebPAnimEncoderOptionsInitInternal, WebPConfig, WebPGetMuxABIVersion,
+  WebPAnimEncoderOptionsInitInternal, WebPConfig, WebPGetMuxABIVersion, WEBP_MAX_DIMENSION,
 };
 
 use crate::{
@@ -93,6 +94,19 @@ pub fn convert(input: &[u8], quality: Quality) -> ConverterResult<Converted> {
   }
 }
 
+/// Limits applied before any pixel memory is allocated: nothing wider or
+/// taller than libwebp can encode, and the `image` crate's default cap on
+/// total decoder allocations (512 MiB).
+///
+/// `GifDecoder::new` starts with no limits at all, so the GIF path needs this
+/// as much as the still path.
+fn decode_limits() -> Limits {
+  let mut limits = Limits::default();
+  limits.max_image_width = Some(WEBP_MAX_DIMENSION);
+  limits.max_image_height = Some(WEBP_MAX_DIMENSION);
+  limits
+}
+
 fn reader(input: &[u8]) -> ConverterResult<ImageReader<Cursor<&[u8]>>> {
   ImageReader::new(Cursor::new(input))
     .with_guessed_format()
@@ -108,14 +122,28 @@ fn detect_format(input: &[u8]) -> ConverterResult<ImageFormat> {
 /// Decodes a still image into the RGB8/RGBA8 layout libwebp accepts.
 ///
 /// Other color types (grayscale, 16-bit, float) are converted rather than
-/// rejected; anything carrying alpha keeps it.
+/// rejected; anything carrying alpha keeps it. The EXIF orientation is applied
+/// to the pixels, because the WebP output carries no metadata.
 fn decode_still(input: &[u8]) -> ConverterResult<ImageData> {
-  let image = reader(input)?
-    .decode()
-    .map_err(|error| ConverterError::FailedToDecodeImage(error.to_string()))?;
+  let decode_error =
+    |error: image::ImageError| ConverterError::FailedToDecodeImage(error.to_string());
 
-  let (width, height) = (image.width(), image.height());
+  // Read only the header first, so an oversized image is rejected with a clear
+  // error before a single pixel is allocated.
+  let mut reader = reader(input)?;
+  reader.no_limits();
+  let mut decoder = reader.into_decoder().map_err(decode_error)?;
+  let (width, height) = decoder.dimensions();
   ensure_encodable(width, height)?;
+  decoder.set_limits(decode_limits()).map_err(decode_error)?;
+
+  // Broken EXIF should not fail the conversion; fall back to the stored layout.
+  let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
+  let mut image = DynamicImage::from_decoder(decoder).map_err(decode_error)?;
+  image.apply_orientation(orientation);
+
+  // A 90-degree rotation swaps the axes. Both are within the limit already.
+  let (width, height) = (image.width(), image.height());
 
   let (data, image_type) = match image {
     DynamicImage::ImageRgb8(buffer) => (buffer.into_raw(), ImageType::Rgb),
@@ -168,9 +196,12 @@ struct EncodedAnimation {
 /// would cost `width * height * 4 * frames` — 1.6 GB for a 1080p 200-frame GIF
 /// — while a GIF decode is cheap next to the WebP encode it feeds.
 fn encode_animation(input: &[u8], quality: f32) -> ConverterResult<EncodedAnimation> {
-  let decoder = open_gif(input)?;
+  let mut decoder = open_gif(input)?;
   let (width, height) = decoder.dimensions();
   ensure_encodable(width, height)?;
+  decoder
+    .set_limits(decode_limits())
+    .map_err(|error| ConverterError::FailedToDecodeAnimation(error.to_string()))?;
 
   let loop_count = match decoder.loop_count() {
     LoopCount::Infinite => 0,
@@ -683,5 +714,92 @@ mod tests {
         height: 1
       })
     ));
+  }
+
+  /// CRC-32 (IEEE) as PNG chunks use it.
+  fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFFu32;
+    for &byte in bytes {
+      crc ^= u32::from(byte);
+      for _ in 0..8 {
+        crc = if crc & 1 == 1 {
+          (crc >> 1) ^ 0xEDB8_8320
+        } else {
+          crc >> 1
+        };
+      }
+    }
+    !crc
+  }
+
+  /// End of the IHDR chunk: 8-byte signature, then length, type, 13 data bytes and CRC.
+  const PNG_IHDR_END: usize = 8 + 4 + 4 + 13 + 4;
+
+  /// Rewrites the width and height in a PNG header, keeping its CRC valid.
+  fn with_png_dimensions(mut png: Vec<u8>, width: u32, height: u32) -> Vec<u8> {
+    png[16..20].copy_from_slice(&width.to_be_bytes());
+    png[20..24].copy_from_slice(&height.to_be_bytes());
+    let crc = crc32(&png[12..29]);
+    png[29..33].copy_from_slice(&crc.to_be_bytes());
+    png
+  }
+
+  /// Inserts an `eXIf` chunk holding only an orientation tag right after IHDR.
+  fn with_exif_orientation(png: Vec<u8>, orientation: u16) -> Vec<u8> {
+    // Big-endian TIFF header, one IFD entry: tag 0x0112 (Orientation), type
+    // SHORT, count 1, the value padded to 4 bytes, then no next IFD.
+    let mut exif = b"MM\x00\x2a\x00\x00\x00\x08\x00\x01\x01\x12\x00\x03\x00\x00\x00\x01".to_vec();
+    exif.extend_from_slice(&orientation.to_be_bytes());
+    exif.extend_from_slice(&[0, 0, 0, 0, 0, 0]);
+
+    let mut chunk = (exif.len() as u32).to_be_bytes().to_vec();
+    let body: Vec<u8> = b"eXIf".iter().chain(&exif).copied().collect();
+    chunk.extend_from_slice(&body);
+    chunk.extend_from_slice(&crc32(&body).to_be_bytes());
+
+    let mut out = png[..PNG_IHDR_END].to_vec();
+    out.extend_from_slice(&chunk);
+    out.extend_from_slice(&png[PNG_IHDR_END..]);
+    out
+  }
+
+  #[test]
+  fn rejects_oversized_images_from_the_header_alone() {
+    // 60000x60000 RGB would need ~10 GB of pixels. The header check must
+    // reject it before the decoder allocates anything.
+    let header_only = with_png_dimensions(
+      png(DynamicImage::ImageRgb8(ImageBuffer::new(1, 1))),
+      60_000,
+      60_000,
+    );
+
+    let result = convert(&header_only, Quality::default());
+
+    assert!(
+      matches!(
+        result,
+        Err(ConverterError::DimensionsTooLarge {
+          width: 60_000,
+          height: 60_000
+        })
+      ),
+      "got {result:?}"
+    );
+  }
+
+  #[test]
+  fn applies_the_exif_orientation() {
+    // 2x1 image tagged "rotate 90 degrees clockwise" (orientation 6).
+    let landscape = png(DynamicImage::ImageRgb8(ImageBuffer::from_fn(
+      2,
+      1,
+      |x, _| Rgb([x as u8 * 200, 0, 0]),
+    )));
+    let rotated = with_exif_orientation(landscape, 6);
+
+    let converted = convert(&rotated, Quality::Fixed(90)).expect("conversion should succeed");
+    let decoded = image::load_from_memory(&converted.data).expect("decode webp");
+
+    assert_eq!((decoded.width(), decoded.height()), (1, 2));
   }
 }

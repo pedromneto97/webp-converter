@@ -73,10 +73,10 @@
   },
   "lint-staged": {
     "*.@(js|ts|tsx)": [
-      "oxlint --fix"
+      "oxlint --fix --no-error-on-unmatched-pattern"
     ],
     "*.@(js|ts|tsx|yml|yaml|md|json|toml)": [
-      "oxfmt --write"
+      "oxfmt --write --no-error-on-unmatched-pattern"
     ]
   },
   "ava": {
