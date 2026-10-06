@@ -3028,6 +3028,48 @@ __metadata:
   languageName: node
   linkType: hard
 
+"rust-webp-converter-darwin-arm64@npm:0.1.1":
+  version: 0.1.1
+  resolution: "rust-webp-converter-darwin-arm64@npm:0.1.1"
+  conditions: os=darwin & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"rust-webp-converter-linux-arm64-gnu@npm:0.1.1":
+  version: 0.1.1
+  resolution: "rust-webp-converter-linux-arm64-gnu@npm:0.1.1"
+  conditions: os=linux & cpu=arm64 & libc=glibc
+  languageName: node
+  linkType: hard
+
+"rust-webp-converter-linux-arm64-musl@npm:0.1.1":
+  version: 0.1.1
+  resolution: "rust-webp-converter-linux-arm64-musl@npm:0.1.1"
+  conditions: os=linux & cpu=arm64 & libc=musl
+  languageName: node
+  linkType: hard
+
+"rust-webp-converter-linux-x64-gnu@npm:0.1.1":
+  version: 0.1.1
+  resolution: "rust-webp-converter-linux-x64-gnu@npm:0.1.1"
+  conditions: os=linux & cpu=x64 & libc=glibc
+  languageName: node
+  linkType: hard
+
+"rust-webp-converter-linux-x64-musl@npm:0.1.1":
+  version: 0.1.1
+  resolution: "rust-webp-converter-linux-x64-musl@npm:0.1.1"
+  conditions: os=linux & cpu=x64 & libc=musl
+  languageName: node
+  linkType: hard
+
+"rust-webp-converter-win32-x64-msvc@npm:0.1.1":
+  version: 0.1.1
+  resolution: "rust-webp-converter-win32-x64-msvc@npm:0.1.1"
+  conditions: os=win32 & cpu=x64
+  languageName: node
+  linkType: hard
+
 "rust-webp-converter@workspace:.":
   version: 0.0.0-use.local
   resolution: "rust-webp-converter@workspace:."
@@ -3041,8 +3083,27 @@ __metadata:
     npm-run-all2: "npm:^9.0.3"
     oxfmt: "npm:^0.72.0"
     oxlint: "npm:^1.83.0"
+    rust-webp-converter-darwin-arm64: "npm:0.1.1"
+    rust-webp-converter-linux-arm64-gnu: "npm:0.1.1"
+    rust-webp-converter-linux-arm64-musl: "npm:0.1.1"
+    rust-webp-converter-linux-x64-gnu: "npm:0.1.1"
+    rust-webp-converter-linux-x64-musl: "npm:0.1.1"
+    rust-webp-converter-win32-x64-msvc: "npm:0.1.1"
     tinybench: "npm:^6.2.0"
     typescript: "npm:^7.0.2"
+  dependenciesMeta:
+    rust-webp-converter-darwin-arm64:
+      optional: true
+    rust-webp-converter-linux-arm64-gnu:
+      optional: true
+    rust-webp-converter-linux-arm64-musl:
+      optional: true
+    rust-webp-converter-linux-x64-gnu:
+      optional: true
+    rust-webp-converter-linux-x64-musl:
+      optional: true
+    rust-webp-converter-win32-x64-msvc:
+      optional: true
   languageName: unknown
   linkType: soft
 
