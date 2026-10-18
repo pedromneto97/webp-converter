@@ -74,15 +74,25 @@ Keep these points when changing the converter:
   Report the frame count by demuxing the output (`WebPDemuxGetI(…, WEBP_FF_FRAME_COUNT)`), not by counting decoded
   frames. A GIF that decodes to a single frame falls back to the still path.
 - **Limits:** check both axes against `WEBP_MAX_DIMENSION` (16383) yourself, because the anim encoder only checks
-  total area. Before `WebPPictureImportRGBA`, check that the RGBA buffer is at least `width * height * 4` bytes;
+  total area. Still images read the header first (`into_decoder` + `dimensions`) and are rejected before any pixel
+  allocation. The reader keeps the default `Limits` (512 MiB, no axis caps): PNG takes limits only at construction,
+  so never call `no_limits()` there. `DynamicImage::from_decoder` does not reserve the pixel buffer, so
+  `decode_still` reserves the peak itself (decoded bytes plus the RGB8/RGBA8 conversion copy, or two RGB8/RGBA8
+  buffers for a 90/270-degree rotation; it converts before rotating so these never stack) and fails with
+  `ImageTooLarge`. Every decoder then gets `decode_limits()` (16383 per axis, 512 MiB), including the GIF decoder,
+  which starts with no limits. Before `WebPPictureImportRGBA`, check that the RGBA buffer is at least `width * height * 4` bytes;
   libwebp reads straight off the pointer.
 - **Memory safety:** every libwebp-owned resource is wrapped in a small RAII type with `Drop` (`WebPFree`,
   `WebPAnimEncoderDelete`, `WebPPictureFree`, `WebPDataClear`, `WebPDemuxDelete`) so `?` early returns cannot leak.
   The demuxer borrows the assembled bytes, so keep it lifetime-tied to them.
 - **Errors:** the reference maps a `ConverterError` enum to integer codes for Dart. Here, `ConverterError` converts to
   `napi::Error` with a descriptive message (`InvalidArg` status for bad options, `GenericFailure` otherwise).
+- **Orientation:** still images apply the EXIF orientation (`decoder.orientation()` + `apply_orientation`), because
+  the output carries no metadata. Broken EXIF falls back to no transform.
 - **Node-specific:** encoding is CPU-heavy (a full quality sweep), so it runs in a napi `AsyncTask` on the libuv
-  threadpool. Options are validated synchronously, before the task is queued.
+  threadpool. Options are validated synchronously, before the task is queued. `convert` copies the input `Buffer`
+  before queueing, because JS can still write to it. `compute` runs inside `catch_panic`, because napi-rs does not
+  catch panics on the worker thread and an unwinding panic there aborts Node.
 
 ## Conventions
 
@@ -90,6 +100,9 @@ Keep these points when changing the converter:
 - JS/TS formatting (oxfmt): 120 columns, no semicolons, single quotes, trailing commas.
 - Tests are TypeScript, run through `@oxc-node/core/register` with `__test__/tsconfig.json` (ESM). The root
   `tsconfig.json` excludes `__test__`.
+- Public docs that must stay in sync with the API: `README.md`, `llms.txt` (shipped in the npm package for AI tools),
+  `examples/`, the doc comments in `src/lib.rs` (they become the JSDoc in `index.d.ts`) and the error list in
+  `src/error.rs`.
 - Test fixtures live in `__test__/fixtures/`. Rust unit tests build their images in memory instead.
 - No WASI target: `libwebp-sys` compiles C sources, and `napi.targets` has no wasm entry.
 
@@ -101,7 +114,25 @@ push to `main`, `.github/workflows/release.yaml` runs the reusable CI (`.github/
 tests). If it passes, the `release-please` job opens or updates a release PR that bumps `package.json`, `Cargo.toml`,
 `Cargo.lock` and `CHANGELOG.md`. Merging that PR creates the tag and GitHub release, and the `publish` job then
 reuses the CI build artifacts and runs `npm publish`
-(`prepublishOnly` runs `napi prepublish`, which publishes the per-platform packages). Do not run `npm publish` or
-`npm version` manually. The npm package is `rust-webp-converter`. CI needs the `NPM_TOKEN` secret. Add an optional
-`RELEASE_PLEASE_TOKEN` PAT secret so CI also runs on the release PR, because PRs opened with `GITHUB_TOKEN` do not
-trigger workflows.
+(`prepublishOnly` runs `napi prepublish --no-gh-release`, which publishes the per-platform packages). Do not run
+`npm publish` or `npm version` manually. The npm package is `rust-webp-converter`.
+
+Publishing uses npm trusted publishing (OIDC) from the `npm` GitHub environment, so there is no npm token secret. Each of
+the 7 packages (`rust-webp-converter` and the 6 `rust-webp-converter-*` platform packages) needs a trusted publisher on
+npmjs.com for workflow `release.yaml` and environment `npm`. A new platform target needs its package created and its
+trusted publisher added before the first release that includes it. Add an optional `RELEASE_PLEASE_TOKEN` PAT secret so
+CI also runs on the release PR, because PRs opened with `GITHUB_TOKEN` do not trigger workflows.
+
+## CI and supply chain
+
+- Pin every action to a full commit SHA with a `# vX` comment. Dependabot (`.github/dependabot.yml`) updates the SHAs.
+- Checkout uses `persist-credentials: false`. Pass `${{ … }}` values to `run:` scripts through `env:`, never inline.
+- Release runs (push to `main`) skip caches. Builds use `--locked`, installs use `yarn install --immutable`.
+- `.yarnrc.yml` disables dependency install scripts and enforces a 3-day package age gate. This package's own
+  `rust-webp-converter-*` platform packages are exempt, because the release references them right after publishing.
+- `Cargo.lock` and `yarn.lock` are committed. After changing `package.json` dependencies, run `yarn install` and
+  commit `yarn.lock`, or the immutable install in CI fails.
+- The `Audit` CI job runs zizmor on the workflows and `cargo deny check advisories`. Run zizmor locally with
+  `uvx zizmor .github/workflows`.
+- Dependabot commit prefixes drive release-please: Rust crate bumps use `fix(deps)` (they change the shipped binary,
+  so they release a patch). npm bumps use `chore(deps)`, and action bumps use `ci(deps)`.

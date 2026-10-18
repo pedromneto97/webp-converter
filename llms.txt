@@ -1,0 +1,46 @@
+# rust-webp-converter
+
+> Node.js native addon (Rust, napi-rs, libwebp) that converts images to WebP. Two async functions: `convert(buffer, options?)` and `convertFile(inputPath, outputPath, options?)`. Animated GIF becomes animated WebP. Quality is chosen automatically by a sweep unless `quality` is set. Prebuilt binaries for macOS arm64, Linux x64/arm64 (glibc and musl) and Windows x64. Node.js >= 22.14.
+
+## Install
+
+`npm install rust-webp-converter` (do not use `--omit=optional`: the platform binary is an optional dependency). No install scripts, no compiler needed. Unsupported platforms (macOS x64, Windows arm64, WASM) throw `Cannot find native binding` on import.
+
+## API
+
+```ts
+import { convert, convertFile } from 'rust-webp-converter' // or require()
+
+convert(input: Buffer, options?: ConvertOptions): Promise<{ data: Buffer; quality: number; frameCount: number }>
+convertFile(inputPath: string, outputPath: string, options?: ConvertOptions): Promise<{ quality: number; frameCount: number }>
+
+interface ConvertOptions {
+  minQuality?: number // integer 0-100, default 80. Lowest quality the sweep tries.
+  quality?: number // integer 0-100. Encode once at this quality; overrides minQuality.
+}
+```
+
+- Input formats: JPEG, PNG, GIF, BMP, TIFF, WebP, QOI, ICO, TGA, PNM, DDS, OpenEXR, Radiance HDR, Farbfeld. Detected from magic bytes, not the file extension. No AVIF.
+- Output: always lossy WebP (animations may mix lossless frames). EXIF orientation is applied. EXIF, XMP and ICC metadata are dropped. No resize or crop.
+- Sweep: still images encode every second quality from `minQuality` to 100 and keep the lowest `bytes / quality`. Animations try at most 4 qualities. `quality` skips the sweep and is faster.
+- `frameCount` counts frames in the output. libwebp merges identical consecutive frames, so it can be lower than the GIF frame count. Still images report 1.
+- `convertFile` overwrites `outputPath`. Its parent directory must exist.
+- Work runs on the libuv threadpool. `convert` copies the input buffer first.
+
+## Errors
+
+- Invalid options: `convert` / `convertFile` throw synchronously, `error.code === 'InvalidArg'`.
+- Conversion failures reject with `error.code === 'GenericFailure'` and one of these messages: `Unsupported or unrecognized image format`, `Failed to decode image: …`, `Failed to decode GIF animation: …`, `Input file not found: …`, `Failed to read input file: …`, `Failed to write output file: …`, `Image dimensions WxH are outside the WebP limit of 16383x16383`, `WebP encoding failed`, `Animated WebP encoding failed`, `Internal error during conversion: …`.
+
+## Limits and untrusted input
+
+- Max 16383 px per axis, and at most 512 MiB of peak pixel memory per still image (both checked from the header before decoding). Decoders use a 512 MiB allocation limit.
+- For user uploads: cap the input size, cap concurrent conversions, prefer a fixed `quality`, never pass user-controlled paths to `convertFile`, and consider a separate process with memory limits.
+
+## Docs
+
+- [README](https://github.com/pedromneto97/webp-converter/blob/main/README.md): install, usage, API, limitations
+- [Type definitions](https://github.com/pedromneto97/webp-converter/blob/main/index.d.ts): JSDoc for every export
+- [Examples](https://github.com/pedromneto97/webp-converter/tree/main/examples): buffer and file conversion, HTTP upload endpoint with limits
+- [SECURITY.md](https://github.com/pedromneto97/webp-converter/blob/main/SECURITY.md): threat model for untrusted input
+- [AGENTS.md](https://github.com/pedromneto97/webp-converter/blob/main/AGENTS.md): architecture and contributor guide

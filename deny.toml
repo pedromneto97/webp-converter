@@ -1,0 +1,11 @@
+# cargo-deny configuration. CI runs only `cargo deny check advisories`.
+# https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
+
+[advisories]
+# Vulnerabilities (and unsound advisories) still fail on any crate in the graph.
+# "Unmaintained" notices only fail for crates this crate depends on directly: a
+# transitive one (e.g. `paste`, RUSTSEC-2024-0436, pulled in by `image` through
+# `exr` and `ravif`) cannot be fixed here and would otherwise turn CI red until
+# upstream moves.
+unmaintained = "workspace"
+ignore = []

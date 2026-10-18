@@ -30,17 +30,17 @@ reads or writes, crashes triggered by crafted input, and unbounded resource use 
 The library does not sandbox its input. If you convert files from untrusted sources, such as user uploads, read this
 section.
 
-- **Resource use is not capped.** Decoding limits come from the `image` crate defaults (a 512 MiB allocation limit
-  for still images). A small crafted file, especially a GIF with a very large declared canvas or many frames, can use
-  gigabytes of memory and a lot of CPU. Each call encodes several candidates. A low `minQuality` increases the CPU cost.
-  Allocation failure aborts the process.
-- **Crashes abort the process.** Conversion runs on a libuv worker thread. A panic in a decoder or an allocation
-  failure on that thread terminates the whole Node.js process instead of rejecting the promise.
+- **Resource use is only partly capped.** Images wider or taller than 16383 px are rejected from the header, before
+  decoding. A still image whose peak pixel memory (decoded buffer plus color conversion or EXIF rotation copy) would
+  exceed 512 MiB is also rejected from the header. Decoders run with a 512 MiB allocation limit, which some decoders
+  enforce only loosely for metadata and intermediate buffers.
+  libwebp's own encoder memory is not capped. CPU is not capped: a GIF with many large frames is re-encoded up to 4
+  times, and a still image up to 51 times when `minQuality` is 0.
+- **Allocation failure aborts the process.** A panic during conversion rejects the promise, but running out of memory
+  terminates the whole Node.js process.
 - **`convertFile` does no path validation.** It follows symlinks, reads the whole input into memory, and writes the
   output non-atomically. Writing to the input path replaces the input. Never pass user-controlled paths without
   validating them yourself.
-- **`convert` reads the input `Buffer` from a worker thread.** Do not modify, resize or transfer the buffer until the
-  returned promise settles.
 - **Many formats are compiled in.** The `image` crate is built with its default features, so more parsers are exposed
   to untrusted bytes than a WebP converter strictly needs.
 
@@ -50,13 +50,19 @@ section.
 - Run conversions of untrusted input in a separate process or container with memory and CPU limits, so a crash or
   out-of-memory kill does not take down your server.
 - Limit how many conversions run at once. They share the libuv threadpool with `fs`, `dns` and `crypto`.
+- Prefer a fixed `quality` for untrusted input, so each call encodes once.
 - Validate and canonicalize any path you pass to `convertFile`, and do not use the input path as the output path.
 - Keep the package up to date.
 
 ## Supply chain
 
-- Releases are created by release-please and published from GitHub Actions only, with npm provenance enabled. Verify
-  with `npm audit signatures`.
-- Prebuilt binaries are built in CI from the tagged commit, for the targets listed in `package.json` under
-  `napi.targets`. The package has no install scripts and downloads nothing at install time.
-- Dependencies are pinned in `Cargo.lock` and `yarn.lock` and updated through Renovate.
+- Releases are created by release-please and published from GitHub Actions only, through npm trusted publishing (OIDC,
+  no long-lived npm token) with provenance. Verify with `npm audit signatures`.
+- Prebuilt binaries are built in CI from the release commit, with `cargo build --locked` and without restored caches,
+  for the targets listed in `package.json` under `napi.targets`. The package has no install scripts and downloads
+  nothing at install time.
+- Dependencies are pinned in `Cargo.lock` and `yarn.lock` and updated through Dependabot, which waits 7 days before it
+  proposes a new version. Yarn also refuses package versions younger than 3 days and does not run dependency install
+  scripts.
+- GitHub Actions are pinned to commit SHAs. CI audits the workflows with zizmor and the Rust dependencies with
+  `cargo deny check advisories`.

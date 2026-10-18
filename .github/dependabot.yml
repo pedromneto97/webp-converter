@@ -1,0 +1,56 @@
+# Commit prefixes follow Conventional Commits so release-please can read them:
+# Rust crates are compiled into the published binary, so their bumps use `fix` and trigger a patch release.
+# JS packages are dev tooling only (`chore`), and GitHub Actions bumps use `ci`.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: fix
+      include: scope
+    groups:
+      cargo-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+      include: scope
+    ignore:
+      # Platform binaries of this package. `napi prepublish` sets their version at release time.
+      - dependency-name: rust-webp-converter-*
+    groups:
+      napi-rs:
+        patterns:
+          - '@napi-rs/*'
+      dev-minor-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      github-actions:
+        patterns:
+          - '*'

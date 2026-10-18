@@ -3,6 +3,7 @@
   "version": "0.1.1",
   "description": "Fast image to WebP conversion for Node.js, with animated GIF support, powered by libwebp and napi-rs",
   "main": "index.js",
+  "types": "index.d.ts",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/pedromneto97/webp-converter.git"
@@ -24,7 +25,8 @@
   ],
   "files": [
     "index.d.ts",
-    "index.js"
+    "index.js",
+    "llms.txt"
   ],
   "napi": {
     "binaryName": "webp-converter",
@@ -53,7 +55,7 @@
     "format:oxfmt": "oxfmt",
     "format:rs": "cargo fmt",
     "lint": "oxlint .",
-    "prepublishOnly": "napi prepublish -t npm",
+    "prepublishOnly": "napi prepublish -t npm --no-gh-release",
     "test": "ava",
     "prepare": "husky"
   },
@@ -72,10 +74,10 @@
   },
   "lint-staged": {
     "*.@(js|ts|tsx)": [
-      "oxlint --fix"
+      "oxlint --fix --no-error-on-unmatched-pattern"
     ],
     "*.@(js|ts|tsx|yml|yaml|md|json|toml)": [
-      "oxfmt --write"
+      "oxfmt --write --no-error-on-unmatched-pattern"
     ]
   },
   "ava": {
@@ -97,8 +99,8 @@
     "rust-webp-converter-darwin-arm64": "0.1.1",
     "rust-webp-converter-linux-arm64-gnu": "0.1.1",
     "rust-webp-converter-linux-arm64-musl": "0.1.1",
-    "rust-webp-converter-win32-x64-msvc": "0.1.1",
     "rust-webp-converter-linux-x64-gnu": "0.1.1",
-    "rust-webp-converter-linux-x64-musl": "0.1.1"
+    "rust-webp-converter-linux-x64-musl": "0.1.1",
+    "rust-webp-converter-win32-x64-msvc": "0.1.1"
   }
 }

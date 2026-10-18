@@ -8,10 +8,12 @@ pub enum ConverterError {
   UnsupportedFormat,
   FailedToDecodeImage(String),
   DimensionsTooLarge { width: u32, height: u32 },
+  ImageTooLarge { width: u32, height: u32 },
   EncodingFailed,
   FailedToWriteOutput(String),
   FailedToDecodeAnimation(String),
   AnimationEncodingFailed,
+  Internal(String),
 }
 
 impl fmt::Display for ConverterError {
@@ -27,12 +29,18 @@ impl fmt::Display for ConverterError {
         "Image dimensions {width}x{height} are outside the WebP limit of {max}x{max}",
         max = libwebp_sys::WEBP_MAX_DIMENSION
       ),
+      Self::ImageTooLarge { width, height } => write!(
+        f,
+        "Decoding a {width}x{height} image needs more than the {max} MiB memory limit",
+        max = crate::converter::MAX_DECODE_BYTES / (1024 * 1024)
+      ),
       Self::EncodingFailed => write!(f, "WebP encoding failed"),
       Self::FailedToWriteOutput(message) => write!(f, "Failed to write output file: {message}"),
       Self::FailedToDecodeAnimation(message) => {
         write!(f, "Failed to decode GIF animation: {message}")
       }
       Self::AnimationEncodingFailed => write!(f, "Animated WebP encoding failed"),
+      Self::Internal(message) => write!(f, "Internal error during conversion: {message}"),
     }
   }
 }
