@@ -75,7 +75,11 @@ Keep these points when changing the converter:
   frames. A GIF that decodes to a single frame falls back to the still path.
 - **Limits:** check both axes against `WEBP_MAX_DIMENSION` (16383) yourself, because the anim encoder only checks
   total area. Still images read the header first (`into_decoder` + `dimensions`) and are rejected before any pixel
-  allocation. Then every decoder gets `decode_limits()` (16383 per axis, 512 MiB), including the GIF decoder,
+  allocation. The reader keeps the default `Limits` (512 MiB, no axis caps): PNG takes limits only at construction,
+  so never call `no_limits()` there. `DynamicImage::from_decoder` does not reserve the pixel buffer, so
+  `decode_still` reserves the peak itself (decoded bytes plus the RGB8/RGBA8 conversion copy, or two RGB8/RGBA8
+  buffers for a 90/270-degree rotation; it converts before rotating so these never stack) and fails with
+  `ImageTooLarge`. Every decoder then gets `decode_limits()` (16383 per axis, 512 MiB), including the GIF decoder,
   which starts with no limits. Before `WebPPictureImportRGBA`, check that the RGBA buffer is at least `width * height * 4` bytes;
   libwebp reads straight off the pointer.
 - **Memory safety:** every libwebp-owned resource is wrapped in a small RAII type with `Drop` (`WebPFree`,

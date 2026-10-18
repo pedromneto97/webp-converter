@@ -99,7 +99,11 @@ fn catch_panic<T>(
 
 pub struct ConvertTask {
   /// A private copy of the input. The JS `Buffer` stays writable from JS while
-  /// the task runs on a worker thread, so reading it in place would race.
+  /// the task runs on a worker thread, so reading it in place would race. Its
+  /// `ArrayBuffer` can also be detached (`transfer()`), after which the memory
+  /// may be freed under the worker. The copy costs one memcpy on the JS thread
+  /// (milliseconds even for the largest inputs); callers who cannot afford it
+  /// should hand over a path with `convertFile`, which reads on the threadpool.
   input: Vec<u8>,
   quality: Quality,
 }

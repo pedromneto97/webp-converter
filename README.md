@@ -133,7 +133,8 @@ remains, the output is a still WebP and `frameCount` is `1`. A single-frame GIF 
 channel.
 
 **Limits.** WebP supports at most 16383 pixels on each axis. Larger images are rejected after reading only the image
-header. Decoders run with the `image` crate's 512 MiB allocation limit.
+header. A still image is also rejected from the header when decoding it, plus any color conversion or EXIF rotation,
+would hold more than 512 MiB of pixels at once. Decoders run with the same 512 MiB allocation limit.
 
 ## Limitations
 

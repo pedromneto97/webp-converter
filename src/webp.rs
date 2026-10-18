@@ -15,9 +15,20 @@ use libwebp_sys::{
 
 use crate::error::{ConverterError, ConverterResult};
 
+#[derive(Clone, Copy)]
 pub enum ImageType {
   Rgb,
   Rgba,
+}
+
+impl ImageType {
+  /// Bytes per pixel.
+  pub fn channels(self) -> usize {
+    match self {
+      Self::Rgb => 3,
+      Self::Rgba => 4,
+    }
+  }
 }
 
 /// A tightly packed RGB8 or RGBA8 pixel buffer.
@@ -64,10 +75,7 @@ impl Drop for WebPBuffer {
 pub fn encode_still(image: &ImageData, quality: f32) -> ConverterResult<Vec<u8>> {
   ensure_encodable(image.width, image.height)?;
 
-  let channels: usize = match image.image_type {
-    ImageType::Rgb => 3,
-    ImageType::Rgba => 4,
-  };
+  let channels = image.image_type.channels();
   // libwebp reads `height` rows of `stride` bytes straight off the pointer.
   if image.data.len() < image.width as usize * image.height as usize * channels {
     return Err(ConverterError::EncodingFailed);

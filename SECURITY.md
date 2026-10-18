@@ -31,7 +31,9 @@ The library does not sandbox its input. If you convert files from untrusted sour
 section.
 
 - **Resource use is only partly capped.** Images wider or taller than 16383 px are rejected from the header, before
-  decoding. Decoders run with the `image` crate's 512 MiB allocation limit, which some decoders enforce only loosely.
+  decoding. A still image whose peak pixel memory (decoded buffer plus color conversion or EXIF rotation copy) would
+  exceed 512 MiB is also rejected from the header. Decoders run with a 512 MiB allocation limit, which some decoders
+  enforce only loosely for metadata and intermediate buffers.
   libwebp's own encoder memory is not capped. CPU is not capped: a GIF with many large frames is re-encoded up to 4
   times, and a still image up to 51 times when `minQuality` is 0.
 - **Allocation failure aborts the process.** A panic during conversion rejects the promise, but running out of memory

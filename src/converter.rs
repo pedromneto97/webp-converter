@@ -3,7 +3,7 @@ use std::io::Cursor;
 use image::{
   codecs::gif::GifDecoder,
   metadata::{LoopCount, Orientation},
-  AnimationDecoder, Delay, DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits,
+  AnimationDecoder, ColorType, Delay, DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits,
 };
 use libwebp_sys::{
   WebPAnimEncoderAdd, WebPAnimEncoderAssemble, WebPAnimEncoderOptions,
@@ -94,9 +94,14 @@ pub fn convert(input: &[u8], quality: Quality) -> ConverterResult<Converted> {
   }
 }
 
+/// Cap on the pixel memory one still-image decode may hold at its peak: the
+/// decoded buffer plus any RGB8/RGBA8 conversion or rotation copy. Matches the
+/// `image` crate's default allocation limit.
+pub const MAX_DECODE_BYTES: u64 = 512 * 1024 * 1024;
+
 /// Limits applied before any pixel memory is allocated: nothing wider or
-/// taller than libwebp can encode, and the `image` crate's default cap on
-/// total decoder allocations (512 MiB).
+/// taller than libwebp can encode, and at most [`MAX_DECODE_BYTES`] of
+/// decoder allocations.
 ///
 /// `GifDecoder::new` starts with no limits at all, so the GIF path needs this
 /// as much as the still path.
@@ -104,6 +109,7 @@ fn decode_limits() -> Limits {
   let mut limits = Limits::default();
   limits.max_image_width = Some(WEBP_MAX_DIMENSION);
   limits.max_image_height = Some(WEBP_MAX_DIMENSION);
+  limits.max_alloc = Some(MAX_DECODE_BYTES);
   limits
 }
 
@@ -128,32 +134,59 @@ fn decode_still(input: &[u8]) -> ConverterResult<ImageData> {
   let decode_error =
     |error: image::ImageError| ConverterError::FailedToDecodeImage(error.to_string());
 
-  // Read only the header first, so an oversized image is rejected with a clear
-  // error before a single pixel is allocated.
-  let mut reader = reader(input)?;
-  reader.no_limits();
-  let mut decoder = reader.into_decoder().map_err(decode_error)?;
+  // The reader keeps the `image` crate's default limits (an allocation cap, no
+  // dimension caps). PNG takes them at construction and never sees a later
+  // `set_limits`, so this is what bounds its chunk buffers; leaving the axes
+  // open lets the header check below report an oversized image clearly.
+  let mut decoder = reader(input)?.into_decoder().map_err(decode_error)?;
   let (width, height) = decoder.dimensions();
   ensure_encodable(width, height)?;
-  decoder.set_limits(decode_limits()).map_err(decode_error)?;
 
   // Broken EXIF should not fail the conversion; fall back to the stored layout.
   let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
-  let mut image = DynamicImage::from_decoder(decoder).map_err(decode_error)?;
+  let image_type = if decoder.color_type().has_alpha() {
+    ImageType::Rgba
+  } else {
+    ImageType::Rgb
+  };
+
+  // Reserve the peak up front, before a single pixel is allocated: the decoded
+  // buffer, plus the RGB8/RGBA8 copy when the color type needs converting, or
+  // two RGB8/RGBA8 buffers while a rotation copies one into the other. The
+  // conversion runs first and frees the decoded buffer, so these never stack.
+  let decoded_bytes = decoder.total_bytes();
+  let output_bytes = u64::from(width) * u64::from(height) * image_type.channels() as u64;
+  let converts = !matches!(decoder.color_type(), ColorType::Rgb8 | ColorType::Rgba8);
+  let rotates = matches!(
+    orientation,
+    Orientation::Rotate90
+      | Orientation::Rotate270
+      | Orientation::Rotate90FlipH
+      | Orientation::Rotate270FlipH
+  );
+  let decode_peak = decoded_bytes.saturating_add(if converts { output_bytes } else { 0 });
+  let rotate_peak = if rotates { output_bytes * 2 } else { 0 };
+
+  let mut limits = decode_limits();
+  limits
+    .reserve(decode_peak.max(rotate_peak))
+    .map_err(|_| ConverterError::ImageTooLarge { width, height })?;
+  decoder.set_limits(limits).map_err(decode_error)?;
+
+  let image = DynamicImage::from_decoder(decoder).map_err(decode_error)?;
+  // `into_rgb8` / `into_rgba8` hand the buffer back untouched when it already
+  // has that layout, and drop the decoded one as soon as the copy exists.
+  let mut image = match image_type {
+    ImageType::Rgb => DynamicImage::ImageRgb8(image.into_rgb8()),
+    ImageType::Rgba => DynamicImage::ImageRgba8(image.into_rgba8()),
+  };
   image.apply_orientation(orientation);
 
   // A 90-degree rotation swaps the axes. Both are within the limit already.
   let (width, height) = (image.width(), image.height());
 
-  let (data, image_type) = match image {
-    DynamicImage::ImageRgb8(buffer) => (buffer.into_raw(), ImageType::Rgb),
-    DynamicImage::ImageRgba8(buffer) => (buffer.into_raw(), ImageType::Rgba),
-    other if other.color().has_alpha() => (other.to_rgba8().into_raw(), ImageType::Rgba),
-    other => (other.to_rgb8().into_raw(), ImageType::Rgb),
-  };
-
   Ok(ImageData {
-    data,
+    data: image.into_bytes(),
     width,
     height,
     image_type,
@@ -781,6 +814,30 @@ mod tests {
         Err(ConverterError::DimensionsTooLarge {
           width: 60_000,
           height: 60_000
+        })
+      ),
+      "got {result:?}"
+    );
+  }
+
+  #[test]
+  fn rejects_images_over_the_decode_memory_limit_from_the_header_alone() {
+    // 16000x16000 is inside the WebP limit, but RGBA16 pixels would need
+    // ~2 GB. The budget must reject it before the decoder allocates anything.
+    let header_only = with_png_dimensions(
+      png(DynamicImage::ImageRgba16(ImageBuffer::new(1, 1))),
+      16_000,
+      16_000,
+    );
+
+    let result = convert(&header_only, Quality::default());
+
+    assert!(
+      matches!(
+        result,
+        Err(ConverterError::ImageTooLarge {
+          width: 16_000,
+          height: 16_000
         })
       ),
       "got {result:?}"

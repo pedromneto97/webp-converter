@@ -34,7 +34,7 @@ interface ConvertOptions {
 
 ## Limits and untrusted input
 
-- Max 16383 px per axis (checked from the header before decoding). Decoders use the `image` crate's 512 MiB allocation limit.
+- Max 16383 px per axis, and at most 512 MiB of peak pixel memory per still image (both checked from the header before decoding). Decoders use a 512 MiB allocation limit.
 - For user uploads: cap the input size, cap concurrent conversions, prefer a fixed `quality`, never pass user-controlled paths to `convertFile`, and consider a separate process with memory limits.
 
 ## Docs
