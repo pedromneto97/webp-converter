@@ -15,6 +15,11 @@ const MAX_CONCURRENT_CONVERSIONS = 2
 let running = 0
 
 async function readBody(request, limit) {
+  const declared = Number(request.headers['content-length'])
+  if (declared > limit) {
+    throw Object.assign(new Error('Upload too large'), { status: 413 })
+  }
+
   const chunks = []
   let size = 0
   for await (const chunk of request) {
@@ -29,9 +34,21 @@ async function readBody(request, limit) {
 
 const server = createServer(async (request, response) => {
   if (request.method !== 'POST' || request.url !== '/convert') {
-    response.writeHead(404).end()
+    // Close the connection so an unread body cannot keep the socket busy.
+    response.writeHead(404, { connection: 'close' }).end()
     return
   }
+
+  let input
+  try {
+    // Read the body before taking a conversion slot, so a slow upload holds a socket, not a slot.
+    input = await readBody(request, MAX_UPLOAD_BYTES)
+  } catch (error) {
+    // The rest of the body is never read, so close the connection instead of draining it.
+    response.writeHead(error.status ?? 400, { 'content-type': 'text/plain', connection: 'close' }).end(error.message)
+    return
+  }
+
   if (running >= MAX_CONCURRENT_CONVERSIONS) {
     response.writeHead(503, { 'retry-after': '1' }).end('Busy, try again')
     return
@@ -39,16 +56,19 @@ const server = createServer(async (request, response) => {
 
   running++
   try {
-    const input = await readBody(request, MAX_UPLOAD_BYTES)
     // A fixed quality keeps the CPU cost per request predictable.
     const { data } = await convert(input, { quality: 80 })
     response.writeHead(200, { 'content-type': 'image/webp', 'content-length': data.length }).end(data)
   } catch (error) {
     // Decode failures mean the client sent something that is not a supported image.
-    response.writeHead(error.status ?? 422, { 'content-type': 'text/plain' }).end(error.message)
+    response.writeHead(422, { 'content-type': 'text/plain' }).end(error.message)
   } finally {
     running--
   }
 })
+
+// Bound how long a client may take to send its headers and body.
+server.headersTimeout = 10_000
+server.requestTimeout = 30_000
 
 server.listen(3000, () => console.log('POST an image to http://localhost:3000/convert'))
